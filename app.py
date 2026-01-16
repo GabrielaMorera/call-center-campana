@@ -553,7 +553,7 @@ def pagina_operadora():
     
     st.markdown(f"""
     <div class="contact-card">
-        <div class="operadora-badge">{modo_texto} | Contacto {num_actual} de {total_pendientes}</div>
+        <div class="operadora-badge">{modo_texto} | Contactos Pendientes {total_pendientes}</div>
         <div class="contact-name">{nombre}</div>
         <div class="contact-phone">📱 {telefono}</div>
     </div>
