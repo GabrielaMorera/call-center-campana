@@ -214,10 +214,10 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    .metric-verde { border-top: 4px solid #28A745; }
-    .metric-amarillo { border-top: 4px solid #FFC107; }
-    .metric-rojo { border-top: 4px solid #DC3545; }
-    .metric-gris { border-top: 4px solid #6C757D; }
+    .metric-verde { border-top: 4px solid #00A651; }
+    .metric-amarillo { border-top: 4px solid #FFB81C; }
+    .metric-rojo { border-top: 4px solid #D32F2F; }
+    .metric-gris { border-top: 4px solid #9E9E9E; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -248,22 +248,50 @@ def cargar_llamadas():
     return pd.DataFrame()
 
 def registrar_llamada(contacto_id, nombre_contacto, telefono, operadora, resultado, notas=""):
-    """Registra una llamada en Google Sheets"""
+    """Registra o actualiza una llamada en Google Sheets"""
     try:
         sheet = get_sheet("llamadas")
         if sheet:
-            nueva_fila = [
-                len(sheet.get_all_values()),  # id
-                int(contacto_id),
-                nombre_contacto,
-                str(telefono),
-                operadora,
-                resultado,
-                notas if notas else "",
-                obtener_hora_colombia().date().isoformat(),
-                obtener_hora_colombia().strftime("%H:%M:%S")
-            ]
-            sheet.append_row(nueva_fila)
+            # Obtener todos los valores de la hoja
+            todas_filas = sheet.get_all_values()
+            hoy = obtener_hora_colombia().date().isoformat()
+            
+            # Buscar si ya existe una llamada de este contacto hoy
+            fila_existente = None
+            for idx, fila in enumerate(todas_filas[1:], start=2):  # Empezar desde fila 2 (omitir header)
+                if len(fila) > 1 and fila[1] == str(int(contacto_id)) and len(fila) > 7 and fila[7] == hoy:
+                    fila_existente = idx
+                    break
+            
+            if fila_existente:
+                # Actualizar fila existente
+                nueva_fila = [
+                    fila_existente - 1,  # id
+                    int(contacto_id),
+                    nombre_contacto,
+                    str(telefono),
+                    operadora,
+                    resultado,
+                    notas if notas else "",
+                    hoy,
+                    obtener_hora_colombia().strftime("%H:%M:%S")
+                ]
+                sheet.update(f"A{fila_existente}:I{fila_existente}", [nueva_fila])
+            else:
+                # Crear nueva fila
+                nueva_fila = [
+                    len(todas_filas),  # id
+                    int(contacto_id),
+                    nombre_contacto,
+                    str(telefono),
+                    operadora,
+                    resultado,
+                    notas if notas else "",
+                    hoy,
+                    obtener_hora_colombia().strftime("%H:%M:%S")
+                ]
+                sheet.append_row(nueva_fila)
+            
             # Limpiar caché después de registrar
             cargar_llamadas.clear()
             return True
@@ -413,32 +441,32 @@ def pagina_operadora():
             <div class="stats-number">{stats['total']}/{META_DIARIA}</div>
             <div class="stats-label">Llamadas Hoy</div>
             <div class="progress-bar">
-                <div class="progress-fill" style="width: {stats['progreso']:.0f}%; background: {'#28A745' if stats['progreso'] >= 100 else '#FFC107' if stats['progreso'] >= 50 else '#DC3545'};"></div>
+                <div class="progress-fill" style="width: {stats['progreso']:.0f}%; background: {'#00A651' if stats['progreso'] >= 100 else '#FFB81C' if stats['progreso'] >= 50 else '#D32F2F'};"></div>
             </div>
         </div>
         """, unsafe_allow_html=True)
     
     with col2:
         st.markdown(f"""<div class="stats-card metric-verde">
-            <div class="stats-number" style="color: #28A745;">🟢 {stats['verde']}</div>
+            <div class="stats-number" style="color: #00A651;">🟢 {stats['verde']}</div>
             <div class="stats-label">Sí Apoyan</div>
         </div>""", unsafe_allow_html=True)
     
     with col3:
         st.markdown(f"""<div class="stats-card metric-amarillo">
-            <div class="stats-number" style="color: #FFC107;">🟡 {stats['amarillo']}</div>
+            <div class="stats-number" style="color: #FFB81C;">🟡 {stats['amarillo']}</div>
             <div class="stats-label">Tal vez</div>
         </div>""", unsafe_allow_html=True)
     
     with col4:
         st.markdown(f"""<div class="stats-card metric-rojo">
-            <div class="stats-number" style="color: #DC3545;">🔴 {stats['rojo']}</div>
+            <div class="stats-number" style="color: #D32F2F;">🔴 {stats['rojo']}</div>
             <div class="stats-label">No Apoyan</div>
         </div>""", unsafe_allow_html=True)
     
     with col5:
         st.markdown(f"""<div class="stats-card metric-gris">
-            <div class="stats-number" style="color: #6C757D;">⚫ {stats['no_contesta']}</div>
+            <div class="stats-number" style="color: #9E9E9E;">⚫ {stats['no_contesta']}</div>
             <div class="stats-label">No Contesta</div>
         </div>""", unsafe_allow_html=True)
     
