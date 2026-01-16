@@ -229,9 +229,8 @@ def cargar_contactos():
         st.error(f"Error cargando contactos: {e}")
     return pd.DataFrame()
 
-@st.cache_data(ttl=10)
 def cargar_llamadas():
-    """Carga llamadas desde Google Sheets"""
+    """Carga llamadas desde Google Sheets (sin caché para datos en tiempo real)"""
     try:
         sheet = get_sheet("llamadas")
         if sheet:
@@ -243,7 +242,6 @@ def cargar_llamadas():
 
 def registrar_llamada(contacto_id, nombre_contacto, telefono, operadora, resultado, notas=""):
     """Registra una llamada en Google Sheets"""
-    import time
     try:
         sheet = get_sheet("llamadas")
         if sheet:
@@ -259,17 +257,12 @@ def registrar_llamada(contacto_id, nombre_contacto, telefono, operadora, resulta
                 datetime.now().strftime("%H:%M:%S")
             ]
             sheet.append_row(nueva_fila)
-            # Pequeña pausa para que Google Sheets procese
-            time.sleep(0.5)
-            # Limpiar TODOS los cachés
-            cargar_llamadas.clear()
-            st.cache_data.clear()
             return True
     except Exception as e:
         st.error(f"Error registrando llamada: {e}")
     return False
 
-def obtener_contactos_pendientes():
+def obtener_contactos_pendientes(incluir_no_contesta=False):
     """Obtiene contactos no llamados hoy"""
     df_contactos = cargar_contactos()
     df_llamadas = cargar_llamadas()
@@ -280,14 +273,40 @@ def obtener_contactos_pendientes():
     hoy = date.today().isoformat()
     
     if not df_llamadas.empty and 'fecha' in df_llamadas.columns and 'contacto_id' in df_llamadas.columns:
-        # Filtrar llamadas de hoy y convertir a enteros
         llamadas_hoy = df_llamadas[df_llamadas['fecha'] == hoy]
-        llamados_hoy = set(int(x) for x in llamadas_hoy['contacto_id'].unique())
-        pendientes = df_contactos[~df_contactos.index.isin(llamados_hoy)]
+        
+        if incluir_no_contesta:
+            # Excluir solo los que SÍ contestaron (verde, amarillo, rojo)
+            contactados = llamadas_hoy[llamadas_hoy['resultado'].isin(['verde', 'amarillo', 'rojo'])]
+            llamados_hoy_ids = set(int(x) for x in contactados['contacto_id'].unique())
+        else:
+            # Excluir TODOS los llamados hoy (incluyendo no_contesta)
+            llamados_hoy_ids = set(int(x) for x in llamadas_hoy['contacto_id'].unique())
+        
+        pendientes = df_contactos[~df_contactos.index.isin(llamados_hoy_ids)]
     else:
         pendientes = df_contactos
     
     return pendientes
+
+def obtener_no_contestaron():
+    """Obtiene los que no contestaron hoy para reintentar"""
+    df_contactos = cargar_contactos()
+    df_llamadas = cargar_llamadas()
+    
+    if df_contactos.empty or df_llamadas.empty:
+        return pd.DataFrame()
+    
+    hoy = date.today().isoformat()
+    
+    llamadas_hoy = df_llamadas[df_llamadas['fecha'] == hoy]
+    no_contestaron = llamadas_hoy[llamadas_hoy['resultado'] == 'no_contesta']
+    
+    if no_contestaron.empty:
+        return pd.DataFrame()
+    
+    ids_no_contestaron = set(int(x) for x in no_contestaron['contacto_id'].unique())
+    return df_contactos[df_contactos.index.isin(ids_no_contestaron)]
 
 def obtener_stats_operadora(operadora, fecha=None):
     """Estadísticas de una operadora"""
@@ -394,15 +413,43 @@ def pagina_operadora():
     
     st.markdown("---")
     
-    # Obtener contactos pendientes
-    df_contactos = cargar_contactos()
-    pendientes = obtener_contactos_pendientes()
+    # Modo de trabajo: nuevos o reintentar
+    if 'modo_reintentar' not in st.session_state:
+        st.session_state.modo_reintentar = False
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("📞 Llamar Nuevos", use_container_width=True, 
+                     type="primary" if not st.session_state.modo_reintentar else "secondary"):
+            st.session_state.modo_reintentar = False
+            st.session_state.contacto_idx = 0
+            st.rerun()
+    with col2:
+        no_contestaron = obtener_no_contestaron()
+        btn_label = f"🔄 Reintentar No Contesta ({len(no_contestaron)})"
+        if st.button(btn_label, use_container_width=True,
+                     type="primary" if st.session_state.modo_reintentar else "secondary"):
+            st.session_state.modo_reintentar = True
+            st.session_state.contacto_idx = 0
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Obtener contactos según modo
+    if st.session_state.modo_reintentar:
+        pendientes = obtener_no_contestaron()
+        modo_texto = "🔄 REINTENTANDO NO CONTESTA"
+    else:
+        pendientes = obtener_contactos_pendientes()
+        modo_texto = "📞 CONTACTOS NUEVOS"
     
     if pendientes.empty:
-        st.success("🎉 **¡Felicitaciones!** Se completaron todos los contactos de hoy.")
-        if st.button("🔄 Refrescar"):
-            cargar_llamadas.clear()
-            cargar_contactos.clear()
+        if st.session_state.modo_reintentar:
+            st.info("✅ No hay contactos para reintentar. ¡Todos contestaron!")
+        else:
+            st.success("🎉 **¡Felicitaciones!** Se completaron todos los contactos nuevos de hoy.")
+        
+        if st.button("🔄 Refrescar datos"):
             st.rerun()
         return
     
@@ -419,9 +466,13 @@ def pagina_operadora():
     nombre = contacto.get('nombre', 'Sin nombre')
     telefono = contacto.get('telefono', 'Sin teléfono')
     
+    # Contador actual
+    num_actual = st.session_state.contacto_idx + 1
+    total_pendientes = len(pendientes)
+    
     st.markdown(f"""
     <div class="contact-card">
-        <div class="operadora-badge">📋 Contacto {st.session_state.contacto_idx + 1} de {len(pendientes)} pendientes</div>
+        <div class="operadora-badge">{modo_texto} | Contacto {num_actual} de {total_pendientes}</div>
         <div class="contact-name">{nombre}</div>
         <div class="contact-phone">📱 {telefono}</div>
     </div>
