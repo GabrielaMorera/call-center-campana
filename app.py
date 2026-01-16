@@ -6,9 +6,15 @@ Con Google Sheets para persistencia
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
+
+# ============== ZONA HORARIA COLOMBIA ==============
+def obtener_hora_colombia():
+    """Obtiene la hora actual en la zona horaria de Colombia (UTC-5)"""
+    zona_colombia = timezone(timedelta(hours=-5))
+    return datetime.now(zona_colombia)
 
 # ============== CONFIGURACIÓN ==============
 st.set_page_config(
@@ -254,8 +260,8 @@ def registrar_llamada(contacto_id, nombre_contacto, telefono, operadora, resulta
                 operadora,
                 resultado,
                 notas if notas else "",
-                date.today().isoformat(),
-                datetime.now().strftime("%H:%M:%S")
+                obtener_hora_colombia().date().isoformat(),
+                obtener_hora_colombia().strftime("%H:%M:%S")
             ]
             sheet.append_row(nueva_fila)
             # Limpiar caché después de registrar
@@ -273,7 +279,7 @@ def obtener_contactos_pendientes(incluir_no_contesta=False):
     if df_contactos.empty:
         return pd.DataFrame()
     
-    hoy = date.today().isoformat()
+    hoy = obtener_hora_colombia().date().isoformat()
     
     if not df_llamadas.empty and 'fecha' in df_llamadas.columns and 'contacto_id' in df_llamadas.columns:
         llamadas_hoy = df_llamadas[df_llamadas['fecha'] == hoy]
@@ -300,7 +306,7 @@ def obtener_no_contestaron():
     if df_contactos.empty or df_llamadas.empty:
         return pd.DataFrame()
     
-    hoy = date.today().isoformat()
+    hoy = obtener_hora_colombia().date().isoformat()
     
     llamadas_hoy = df_llamadas[df_llamadas['fecha'] == hoy]
     no_contestaron = llamadas_hoy[llamadas_hoy['resultado'] == 'no_contesta']
@@ -316,7 +322,7 @@ def obtener_stats_operadora(operadora, fecha=None):
     df_llamadas = cargar_llamadas()
     
     if fecha is None:
-        fecha = date.today().isoformat()
+        fecha = obtener_hora_colombia().date().isoformat()
     
     stats = {"total": 0, "verde": 0, "amarillo": 0, "rojo": 0, "no_contesta": 0, "progreso": 0}
     
@@ -387,7 +393,7 @@ def pagina_operadora():
     df_llamadas = cargar_llamadas()
     
     # Calcular stats desde los datos cargados
-    hoy = date.today().isoformat()
+    hoy = obtener_hora_colombia().date().isoformat()
     mis_llamadas = df_llamadas[(df_llamadas['operadora'] == operadora_nombre) & (df_llamadas['fecha'] == hoy)] if not df_llamadas.empty else pd.DataFrame()
     
     stats = {
@@ -661,7 +667,16 @@ def mostrar_sidebar():
         """, unsafe_allow_html=True)
         
         st.markdown("---")
-        st.markdown(f"📅 **{date.today().strftime('%d/%m/%Y')}**")
+        
+        # Meses en español
+        meses = {
+            1: "enero", 2: "febrero", 3: "marzo", 4: "abril", 5: "mayo", 6: "junio",
+            7: "julio", 8: "agosto", 9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre"
+        }
+        
+        hora_col = obtener_hora_colombia()
+        fecha_formateada = f"{hora_col.day:02d} de {meses[hora_col.month]} de {hora_col.year}"
+        st.markdown(f"📅 **{fecha_formateada}**")
         
         if user['rol'] == 'operadora':
             stats = obtener_stats_operadora(user['nombre'])
