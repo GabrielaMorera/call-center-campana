@@ -624,12 +624,15 @@ def pagina_operadora():
     nombre = contacto.get('nombre', 'Sin nombre')
     telefono = contacto.get('telefono', 'Sin teléfono')
     
-    num_actual = st.session_state.contacto_idx + 1
-    total_pendientes = len(pendientes)
+    # Calcular número de llamada actual (llamadas hechas + 1)
+    llamadas_hechas = stats['total']
+    num_actual = llamadas_hechas + 1
+    # Total es llamadas hechas + pendientes restantes
+    total_asignados = llamadas_hechas + len(pendientes)
     
     st.markdown(f"""
     <div class="contact-card">
-        <div class="operadora-badge">{modo_texto} | Contacto {num_actual} de {total_pendientes}</div>
+        <div class="operadora-badge">{modo_texto} | Llamada {num_actual} de {total_asignados}</div>
         <div class="contact-name">{nombre}</div>
         <div class="contact-phone">📱 {telefono}</div>
     </div>
