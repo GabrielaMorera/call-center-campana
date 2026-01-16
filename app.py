@@ -569,30 +569,37 @@ def pagina_operadora():
         if st.button("🟢 SÍ APOYA", use_container_width=True, type="primary"):
             if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "verde", notas, es_reintento=st.session_state.modo_reintentar):
                 st.balloons()
-                # Si es reintentar, no resetear índice (continúa con el siguiente)
-                # Si es nuevo, resetear índice
-                if not st.session_state.modo_reintentar:
+                # Forzar limpieza completa de caché en modo reintentar
+                if st.session_state.modo_reintentar:
+                    st.cache_data.clear()
+                else:
                     st.session_state.contacto_idx = 0
                 st.rerun()
     
     with col2:
         if st.button("🟡 TAL VEZ", use_container_width=True):
             if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "amarillo", notas, es_reintento=st.session_state.modo_reintentar):
-                if not st.session_state.modo_reintentar:
+                if st.session_state.modo_reintentar:
+                    st.cache_data.clear()
+                else:
                     st.session_state.contacto_idx = 0
                 st.rerun()
     
     with col3:
         if st.button("🔴 NO APOYA", use_container_width=True):
             if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "rojo", notas, es_reintento=st.session_state.modo_reintentar):
-                if not st.session_state.modo_reintentar:
+                if st.session_state.modo_reintentar:
+                    st.cache_data.clear()
+                else:
                     st.session_state.contacto_idx = 0
                 st.rerun()
     
     with col4:
         if st.button("⚫ NO CONTESTA", use_container_width=True):
             if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "no_contesta", notas, es_reintento=st.session_state.modo_reintentar):
-                if not st.session_state.modo_reintentar:
+                if st.session_state.modo_reintentar:
+                    st.cache_data.clear()
+                else:
                     st.session_state.contacto_idx = 0
                 st.rerun()
     
