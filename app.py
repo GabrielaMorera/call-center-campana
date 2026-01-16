@@ -248,6 +248,28 @@ def cargar_llamadas():
         st.error(f"Error cargando llamadas: {e}")
     return pd.DataFrame()
 
+def cargar_contactos_sin_cache():
+    """Carga contactos SIN caché (para reintentos)"""
+    try:
+        sheet = get_sheet("contactos")
+        if sheet:
+            data = sheet.get_all_records()
+            return pd.DataFrame(data)
+    except Exception as e:
+        st.error(f"Error cargando contactos: {e}")
+    return pd.DataFrame()
+
+def cargar_llamadas_sin_cache():
+    """Carga llamadas SIN caché (para reintentos)"""
+    try:
+        sheet = get_sheet("llamadas")
+        if sheet:
+            data = sheet.get_all_records()
+            return pd.DataFrame(data)
+    except Exception as e:
+        st.error(f"Error cargando llamadas: {e}")
+    return pd.DataFrame()
+
 def registrar_llamada(contacto_id, nombre_contacto, telefono, operadora, resultado, notas="", es_reintento=False):
     """Registra o actualiza una llamada en Google Sheets
     
@@ -523,7 +545,22 @@ def pagina_operadora():
     
     # Seleccionar lista según modo
     if st.session_state.modo_reintentar:
-        pendientes = pendientes_no_contesta
+        # Para reintentos, SIEMPRE cargar datos frescos sin caché
+        df_llamadas_fresh = cargar_llamadas_sin_cache()
+        df_contactos_fresh = cargar_contactos_sin_cache()
+        
+        if not df_llamadas_fresh.empty and 'fecha' in df_llamadas_fresh.columns:
+            llamadas_hoy_fresh = df_llamadas_fresh[df_llamadas_fresh['fecha'] == hoy]
+            if not llamadas_hoy_fresh.empty:
+                llamadas_hoy_fresh = llamadas_hoy_fresh.sort_values('hora', ascending=False)
+                ultimo_fresh = llamadas_hoy_fresh.drop_duplicates(subset=['contacto_id'], keep='first')
+                no_contesta_fresh = set(int(x) for x in ultimo_fresh[ultimo_fresh['resultado'] == 'no_contesta']['contacto_id'].unique())
+            else:
+                no_contesta_fresh = set()
+        else:
+            no_contesta_fresh = set()
+        
+        pendientes = df_contactos_fresh[df_contactos_fresh.index.isin(no_contesta_fresh)] if not df_contactos_fresh.empty else pd.DataFrame()
         modo_texto = "🔄 REINTENTANDO"
     else:
         pendientes = pendientes_nuevos
@@ -570,33 +607,21 @@ def pagina_operadora():
         if st.button("🟢 SÍ APOYA", use_container_width=True, type="primary"):
             if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "verde", notas, es_reintento=st.session_state.modo_reintentar):
                 st.balloons()
-                if st.session_state.modo_reintentar:
-                    time.sleep(1)  # Esperar a que se sincronice Google Sheets
-                    cargar_llamadas.clear()  # Limpiar caché
-                    cargar_contactos.clear()
-                else:
+                if not st.session_state.modo_reintentar:
                     st.session_state.contacto_idx = 0
                 st.rerun()
     
     with col2:
         if st.button("🟡 TAL VEZ", use_container_width=True):
             if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "amarillo", notas, es_reintento=st.session_state.modo_reintentar):
-                if st.session_state.modo_reintentar:
-                    time.sleep(1)
-                    cargar_llamadas.clear()
-                    cargar_contactos.clear()
-                else:
+                if not st.session_state.modo_reintentar:
                     st.session_state.contacto_idx = 0
                 st.rerun()
     
     with col3:
         if st.button("🔴 NO APOYA", use_container_width=True):
             if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "rojo", notas, es_reintento=st.session_state.modo_reintentar):
-                if st.session_state.modo_reintentar:
-                    time.sleep(1)
-                    cargar_llamadas.clear()
-                    cargar_contactos.clear()
-                else:
+                if not st.session_state.modo_reintentar:
                     st.session_state.contacto_idx = 0
                 st.rerun()
     
@@ -604,9 +629,7 @@ def pagina_operadora():
         if st.button("⚫ NO CONTESTA", use_container_width=True):
             if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "no_contesta", notas, es_reintento=st.session_state.modo_reintentar):
                 if st.session_state.modo_reintentar:
-                    time.sleep(1)
-                    cargar_llamadas.clear()
-                    cargar_contactos.clear()
+                    st.session_state.contacto_idx += 1  # Siguiente en reintentos
                 else:
                     st.session_state.contacto_idx = 0
                 st.rerun()
