@@ -1,0 +1,14 @@
+# Secrets - NUNCA subir
+.streamlit/
+secrets.toml
+secrets_ejemplo.toml
+*.json
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
+
+# OS
+.DS_Store
