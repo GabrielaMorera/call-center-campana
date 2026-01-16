@@ -223,7 +223,7 @@ st.markdown("""
 
 # ============== FUNCIONES DE DATOS ==============
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=5)
 def cargar_contactos():
     """Carga contactos desde Google Sheets"""
     try:
@@ -235,7 +235,7 @@ def cargar_contactos():
         st.error(f"Error cargando contactos: {e}")
     return pd.DataFrame()
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=5)
 def cargar_llamadas():
     """Carga llamadas desde Google Sheets"""
     try:
@@ -481,8 +481,18 @@ def pagina_operadora():
     # Calcular pendientes y no_contestaron desde datos ya cargados
     if not df_llamadas.empty and 'fecha' in df_llamadas.columns:
         llamadas_hoy = df_llamadas[df_llamadas['fecha'] == hoy]
-        todos_llamados = set(int(x) for x in llamadas_hoy['contacto_id'].unique()) if not llamadas_hoy.empty else set()
-        no_contestaron_ids = set(int(x) for x in llamadas_hoy[llamadas_hoy['resultado'] == 'no_contesta']['contacto_id'].unique()) if not llamadas_hoy.empty else set()
+        
+        # Obtener SOLO el último registro de cada contacto hoy (por timestamp)
+        if not llamadas_hoy.empty:
+            # Ordenar por hora y obtener el último registro de cada contacto
+            llamadas_hoy = llamadas_hoy.sort_values('hora', ascending=False)
+            ultimo_registro_por_contacto = llamadas_hoy.drop_duplicates(subset=['contacto_id'], keep='first')
+            
+            todos_llamados = set(int(x) for x in ultimo_registro_por_contacto['contacto_id'].unique())
+            no_contestaron_ids = set(int(x) for x in ultimo_registro_por_contacto[ultimo_registro_por_contacto['resultado'] == 'no_contesta']['contacto_id'].unique())
+        else:
+            todos_llamados = set()
+            no_contestaron_ids = set()
     else:
         todos_llamados = set()
         no_contestaron_ids = set()
