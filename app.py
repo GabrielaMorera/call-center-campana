@@ -247,8 +247,13 @@ def cargar_llamadas():
         st.error(f"Error cargando llamadas: {e}")
     return pd.DataFrame()
 
-def registrar_llamada(contacto_id, nombre_contacto, telefono, operadora, resultado, notas=""):
-    """Registra o actualiza una llamada en Google Sheets"""
+def registrar_llamada(contacto_id, nombre_contacto, telefono, operadora, resultado, notas="", es_reintento=False):
+    """Registra o actualiza una llamada en Google Sheets
+    
+    Args:
+        es_reintento: Si True, actualiza el registro existente para no contesta
+                      Si False, siempre crea un nuevo registro
+    """
     try:
         sheet = get_sheet("llamadas")
         if sheet:
@@ -256,15 +261,16 @@ def registrar_llamada(contacto_id, nombre_contacto, telefono, operadora, resulta
             todas_filas = sheet.get_all_values()
             hoy = obtener_hora_colombia().date().isoformat()
             
-            # Buscar si ya existe una llamada de este contacto hoy
+            # Buscar si ya existe una llamada de este contacto hoy (solo si es reintento)
             fila_existente = None
-            for idx, fila in enumerate(todas_filas[1:], start=2):  # Empezar desde fila 2 (omitir header)
-                if len(fila) > 1 and fila[1] == str(int(contacto_id)) and len(fila) > 7 and fila[7] == hoy:
-                    fila_existente = idx
-                    break
+            if es_reintento:
+                for idx, fila in enumerate(todas_filas[1:], start=2):  # Empezar desde fila 2 (omitir header)
+                    if len(fila) > 1 and fila[1] == str(int(contacto_id)) and len(fila) > 7 and fila[7] == hoy:
+                        fila_existente = idx
+                        break
             
-            if fila_existente:
-                # Actualizar fila existente
+            if fila_existente and es_reintento:
+                # Actualizar fila existente (solo para reintentos)
                 nueva_fila = [
                     fila_existente - 1,  # id
                     int(contacto_id),
@@ -551,26 +557,26 @@ def pagina_operadora():
     
     with col1:
         if st.button("🟢 SÍ APOYA", use_container_width=True, type="primary"):
-            if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "verde", notas):
+            if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "verde", notas, es_reintento=st.session_state.modo_reintentar):
                 st.balloons()
                 st.session_state.contacto_idx = 0
                 st.rerun()
     
     with col2:
         if st.button("🟡 TAL VEZ", use_container_width=True):
-            if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "amarillo", notas):
+            if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "amarillo", notas, es_reintento=st.session_state.modo_reintentar):
                 st.session_state.contacto_idx = 0
                 st.rerun()
     
     with col3:
         if st.button("🔴 NO APOYA", use_container_width=True):
-            if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "rojo", notas):
+            if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "rojo", notas, es_reintento=st.session_state.modo_reintentar):
                 st.session_state.contacto_idx = 0
                 st.rerun()
     
     with col4:
         if st.button("⚫ NO CONTESTA", use_container_width=True):
-            if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "no_contesta", notas):
+            if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "no_contesta", notas, es_reintento=st.session_state.modo_reintentar):
                 st.session_state.contacto_idx = 0
                 st.rerun()
     
