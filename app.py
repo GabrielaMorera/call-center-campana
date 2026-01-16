@@ -607,21 +607,27 @@ def pagina_operadora():
         if st.button("🟢 SÍ APOYA", use_container_width=True, type="primary"):
             if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "verde", notas, es_reintento=st.session_state.modo_reintentar):
                 st.balloons()
-                if not st.session_state.modo_reintentar:
+                if st.session_state.modo_reintentar:
+                    time.sleep(2)  # Esperar propagación en Google Sheets
+                else:
                     st.session_state.contacto_idx = 0
                 st.rerun()
     
     with col2:
         if st.button("🟡 TAL VEZ", use_container_width=True):
             if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "amarillo", notas, es_reintento=st.session_state.modo_reintentar):
-                if not st.session_state.modo_reintentar:
+                if st.session_state.modo_reintentar:
+                    time.sleep(2)
+                else:
                     st.session_state.contacto_idx = 0
                 st.rerun()
     
     with col3:
         if st.button("🔴 NO APOYA", use_container_width=True):
             if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "rojo", notas, es_reintento=st.session_state.modo_reintentar):
-                if not st.session_state.modo_reintentar:
+                if st.session_state.modo_reintentar:
+                    time.sleep(2)
+                else:
                     st.session_state.contacto_idx = 0
                 st.rerun()
     
