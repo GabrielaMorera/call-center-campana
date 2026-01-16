@@ -95,6 +95,38 @@ def verificar_credenciales(username, password):
 def obtener_operadoras():
     return [USUARIOS[u]["nombre"] for u in USUARIOS if USUARIOS[u]["rol"] == "operadora"]
 
+def obtener_indice_operadora(operadora_nombre):
+    """Obtiene el índice de la operadora para dividir contactos"""
+    operadoras = obtener_operadoras()
+    if operadora_nombre in operadoras:
+        return operadoras.index(operadora_nombre)
+    return 0
+
+def dividir_contactos_por_operadora(df_contactos, operadora_nombre):
+    """Divide los contactos entre las operadoras activas para evitar duplicados"""
+    if df_contactos.empty:
+        return df_contactos
+    
+    operadoras = obtener_operadoras()
+    num_operadoras = len(operadoras)
+    
+    if num_operadoras <= 1:
+        return df_contactos
+    
+    indice_operadora = obtener_indice_operadora(operadora_nombre)
+    
+    # Dividir contactos: cada operadora recibe contactos según su índice
+    # Operadora 0: índices 0, 2, 4, 6...
+    # Operadora 1: índices 1, 3, 5, 7...
+    contactos_lista = df_contactos.reset_index()
+    contactos_asignados = contactos_lista[contactos_lista.index % num_operadoras == indice_operadora]
+    
+    # Restaurar el índice original
+    if 'index' in contactos_asignados.columns:
+        contactos_asignados = contactos_asignados.set_index('index')
+    
+    return contactos_asignados
+
 # ============== ESTILOS CSS ==============
 st.markdown("""
 <style>
@@ -523,6 +555,10 @@ def pagina_operadora():
     pendientes_nuevos = df_contactos[~df_contactos.index.isin(todos_llamados)] if not df_contactos.empty else pd.DataFrame()
     pendientes_no_contesta = df_contactos[df_contactos.index.isin(no_contestaron_ids)] if not df_contactos.empty else pd.DataFrame()
     
+    # Dividir contactos entre operadoras para evitar que llamen al mismo
+    pendientes_nuevos = dividir_contactos_por_operadora(pendientes_nuevos, operadora_nombre)
+    pendientes_no_contesta = dividir_contactos_por_operadora(pendientes_no_contesta, operadora_nombre)
+    
     # Modo de trabajo
     if 'modo_reintentar' not in st.session_state:
         st.session_state.modo_reintentar = False
@@ -561,6 +597,8 @@ def pagina_operadora():
             no_contesta_fresh = set()
         
         pendientes = df_contactos_fresh[df_contactos_fresh.index.isin(no_contesta_fresh)] if not df_contactos_fresh.empty else pd.DataFrame()
+        # Dividir contactos entre operadoras
+        pendientes = dividir_contactos_por_operadora(pendientes, operadora_nombre)
         modo_texto = "🔄 REINTENTANDO"
     else:
         pendientes = pendientes_nuevos
