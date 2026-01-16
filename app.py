@@ -1,5 +1,5 @@
 """
-🗳️ SISTEMA DE SEGUIMIENTO DE LLAMADAS - CAMPAÑA GABRIELA 2026
+🗳️ SISTEMA DE SEGUIMIENTO DE LLAMADAS - CAMPAÑA DORA 2026
 Call Center con Sistema de Semáforo
 Con Google Sheets para persistencia
 """
@@ -72,7 +72,7 @@ def get_users():
         pass
     
     return {
-        "admin": {"password": "gualiva2026", "nombre": "Gabriela Morera", "rol": "admin"},
+        "admin": {"password": "gualiva2026", "nombre": "admin", "rol": "admin"},
         "adriana": {"password": "adriana123", "nombre": "Adriana Melo", "rol": "operadora"},
         "jesica": {"password": "jesica123", "nombre": "Jesica Tinoco", "rol": "operadora"}
     }
@@ -243,6 +243,7 @@ def cargar_llamadas():
 
 def registrar_llamada(contacto_id, nombre_contacto, telefono, operadora, resultado, notas=""):
     """Registra una llamada en Google Sheets"""
+    import time
     try:
         sheet = get_sheet("llamadas")
         if sheet:
@@ -250,16 +251,19 @@ def registrar_llamada(contacto_id, nombre_contacto, telefono, operadora, resulta
                 len(sheet.get_all_values()),  # id
                 int(contacto_id),
                 nombre_contacto,
-                telefono,
+                str(telefono),
                 operadora,
                 resultado,
-                notas,
+                notas if notas else "",
                 date.today().isoformat(),
                 datetime.now().strftime("%H:%M:%S")
             ]
             sheet.append_row(nueva_fila)
-            # Limpiar caché para refrescar datos
+            # Pequeña pausa para que Google Sheets procese
+            time.sleep(0.5)
+            # Limpiar TODOS los cachés
             cargar_llamadas.clear()
+            st.cache_data.clear()
             return True
     except Exception as e:
         st.error(f"Error registrando llamada: {e}")
@@ -275,8 +279,10 @@ def obtener_contactos_pendientes():
     
     hoy = date.today().isoformat()
     
-    if not df_llamadas.empty and 'fecha' in df_llamadas.columns:
-        llamados_hoy = df_llamadas[df_llamadas['fecha'] == hoy]['contacto_id'].unique()
+    if not df_llamadas.empty and 'fecha' in df_llamadas.columns and 'contacto_id' in df_llamadas.columns:
+        # Filtrar llamadas de hoy y convertir a enteros
+        llamadas_hoy = df_llamadas[df_llamadas['fecha'] == hoy]
+        llamados_hoy = set(int(x) for x in llamadas_hoy['contacto_id'].unique())
         pendientes = df_contactos[~df_contactos.index.isin(llamados_hoy)]
     else:
         pendientes = df_contactos
@@ -311,7 +317,7 @@ def obtener_stats_operadora(operadora, fecha=None):
 def pagina_login():
     st.markdown("""
     <div class="main-header">
-        <h1>🗳️ Campaña Gabriela 2026</h1>
+        <h1>🗳️ Campaña Dora 2026</h1>
         <p>Sistema de Call Center - Gualivá</p>
     </div>
     """, unsafe_allow_html=True)
