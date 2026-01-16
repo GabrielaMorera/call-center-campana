@@ -9,6 +9,7 @@ import pandas as pd
 from datetime import datetime, date, timezone, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
+import time
 
 # ============== ZONA HORARIA COLOMBIA ==============
 def obtener_hora_colombia():
@@ -553,7 +554,7 @@ def pagina_operadora():
     
     st.markdown(f"""
     <div class="contact-card">
-        <div class="operadora-badge">{modo_texto} | Contactos Pendientes {total_pendientes}</div>
+        <div class="operadora-badge">{modo_texto} | Contacto {num_actual} de {total_pendientes}</div>
         <div class="contact-name">{nombre}</div>
         <div class="contact-phone">📱 {telefono}</div>
     </div>
@@ -570,7 +571,9 @@ def pagina_operadora():
             if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "verde", notas, es_reintento=st.session_state.modo_reintentar):
                 st.balloons()
                 if st.session_state.modo_reintentar:
-                    st.session_state.contacto_idx += 1
+                    time.sleep(1)  # Esperar a que se sincronice Google Sheets
+                    cargar_llamadas.clear()  # Limpiar caché
+                    cargar_contactos.clear()
                 else:
                     st.session_state.contacto_idx = 0
                 st.rerun()
@@ -579,7 +582,9 @@ def pagina_operadora():
         if st.button("🟡 TAL VEZ", use_container_width=True):
             if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "amarillo", notas, es_reintento=st.session_state.modo_reintentar):
                 if st.session_state.modo_reintentar:
-                    st.session_state.contacto_idx += 1
+                    time.sleep(1)
+                    cargar_llamadas.clear()
+                    cargar_contactos.clear()
                 else:
                     st.session_state.contacto_idx = 0
                 st.rerun()
@@ -588,7 +593,9 @@ def pagina_operadora():
         if st.button("🔴 NO APOYA", use_container_width=True):
             if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "rojo", notas, es_reintento=st.session_state.modo_reintentar):
                 if st.session_state.modo_reintentar:
-                    st.session_state.contacto_idx += 1
+                    time.sleep(1)
+                    cargar_llamadas.clear()
+                    cargar_contactos.clear()
                 else:
                     st.session_state.contacto_idx = 0
                 st.rerun()
@@ -597,7 +604,9 @@ def pagina_operadora():
         if st.button("⚫ NO CONTESTA", use_container_width=True):
             if registrar_llamada(contacto_id, nombre, telefono, operadora_nombre, "no_contesta", notas, es_reintento=st.session_state.modo_reintentar):
                 if st.session_state.modo_reintentar:
-                    st.session_state.contacto_idx += 1
+                    time.sleep(1)
+                    cargar_llamadas.clear()
+                    cargar_contactos.clear()
                 else:
                     st.session_state.contacto_idx = 0
                 st.rerun()
