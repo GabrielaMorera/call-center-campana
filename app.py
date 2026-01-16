@@ -715,10 +715,24 @@ def mostrar_metricas():
     
     with col1:
         st.markdown("#### 🥧 Distribución")
+        # Crear DataFrame para mapeo correcto de colores
+        df_pie = pd.DataFrame({
+            'categoria': ['Sí', 'Tal vez', 'No', 'No contesta'],
+            'cantidad': [verdes, amarillos, rojos, no_contesta]
+        })
+        # Mapeo explícito de colores por categoría
+        color_map = {
+            'Sí': '#00A651',           # Verde
+            'Tal vez': '#FFB81C',      # Amarillo
+            'No': '#D32F2F',           # Rojo
+            'No contesta': '#9E9E9E'   # Gris
+        }
         fig = px.pie(
-            values=[verdes, amarillos, rojos, no_contesta],
-            names=['🟢 Sí', '🟡 Tal vez', '🔴 No', '⚫ No contesta'],
-            color_discrete_sequence=['#28A745', '#FFC107', '#DC3545', '#6C757D'],
+            df_pie,
+            values='cantidad',
+            names='categoria',
+            color='categoria',
+            color_discrete_map=color_map,
             hole=0.4
         )
         st.plotly_chart(fig, use_container_width=True)
