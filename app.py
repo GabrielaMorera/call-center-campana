@@ -687,6 +687,46 @@ def pagina_operadora():
         if st.button("⏭️ Saltar este contacto", use_container_width=True):
             st.session_state.contacto_idx += 1
             st.rerun()
+    
+    # ============== HISTORIAL DE NO CONTESTADOS ==============
+    st.markdown("---")
+    with st.expander("📋 Ver historial de NO CONTESTADOS", expanded=False):
+        df_llamadas = cargar_llamadas()
+        df_contactos = cargar_contactos()
+        
+        if not df_llamadas.empty:
+            # Obtener todos los no_contesta
+            no_contestados = df_llamadas[df_llamadas['resultado'] == 'no_contesta'].copy()
+            
+            if not no_contestados.empty:
+                # Ordenar por fecha y hora (más recientes primero)
+                no_contestados['fecha_hora'] = no_contestados['fecha'].astype(str) + ' ' + no_contestados['hora'].astype(str)
+                no_contestados = no_contestados.sort_values('fecha_hora', ascending=False)
+                
+                # Eliminar duplicados, quedarse con el más reciente de cada contacto
+                no_contestados_unicos = no_contestados.drop_duplicates(subset=['contacto_id'], keep='first')
+                
+                # Filtrar solo los que NO tienen un resultado definitivo posterior
+                ids_gestionados = obtener_contactos_ya_gestionados()
+                no_contestados_pendientes = no_contestados_unicos[~no_contestados_unicos['contacto_id'].astype(int).isin(ids_gestionados)]
+                
+                st.markdown(f"**Total no contestados pendientes: {len(no_contestados_pendientes)}**")
+                
+                if not no_contestados_pendientes.empty:
+                    # Mostrar tabla
+                    tabla = no_contestados_pendientes[['contacto_id', 'nombre_contacto', 'telefono', 'fecha', 'hora', 'operadora', 'notas']].copy()
+                    tabla.columns = ['ID', 'Nombre', 'Teléfono', 'Última Fecha', 'Hora', 'Operadora', 'Notas']
+                    st.dataframe(tabla, use_container_width=True, hide_index=True)
+                    
+                    # Descargar CSV
+                    csv = tabla.to_csv(index=False).encode('utf-8')
+                    st.download_button("📥 Descargar lista No Contestados", csv, "no_contestados.csv", use_container_width=True)
+                else:
+                    st.info("✅ Todos los contactos han sido gestionados")
+            else:
+                st.info("No hay registros de 'no contesta'")
+        else:
+            st.info("No hay llamadas registradas")
 
 def pagina_admin():
     st.markdown("""
