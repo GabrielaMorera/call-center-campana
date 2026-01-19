@@ -405,6 +405,31 @@ def obtener_contactos_pendientes():
     
     return pendientes
 
+def obtener_ultimo_contacto_llamado_por_operadora(operadora_nombre):
+    """
+    Obtiene el ID del último contacto que fue llamado por ESTA operadora
+    en CUALQUIER fecha. Esto permite continuar desde donde se quedó.
+    """
+    df_llamadas = cargar_llamadas()
+    
+    if df_llamadas.empty:
+        return None
+    
+    # Filtrar por operadora
+    llamadas_operadora = df_llamadas[df_llamadas['operadora'] == operadora_nombre]
+    
+    if llamadas_operadora.empty:
+        return None
+    
+    # Ordenar por fecha y hora descendente para obtener el último
+    llamadas_operadora = llamadas_operadora.copy()
+    llamadas_operadora['fecha_hora'] = llamadas_operadora['fecha'].astype(str) + ' ' + llamadas_operadora['hora'].astype(str)
+    llamadas_operadora = llamadas_operadora.sort_values('fecha_hora', ascending=False)
+    
+    ultimo_id = int(llamadas_operadora.iloc[0]['contacto_id'])
+    
+    return ultimo_id
+
 def obtener_stats_operadora(operadora, fecha=None):
     """Estadísticas de una operadora"""
     df_llamadas = cargar_llamadas()
@@ -556,9 +581,37 @@ def pagina_operadora():
         st.success("🎉 **¡Felicitaciones!** Se completaron todos los contactos.")
         return
     
-    # Índice actual
+    # ============== CONTINUAR DESDE EL ÚLTIMO DE ESTA OPERADORA ==============
+    # Buscar el último contacto llamado por ESTA operadora (cualquier fecha)
+    ultimo_llamado = obtener_ultimo_contacto_llamado_por_operadora(operadora_nombre)
+    
+    # Encontrar la posición del siguiente contacto pendiente para esta operadora
+    indice_inicial = 0
+    if ultimo_llamado is not None:
+        # Buscar la posición del último contacto llamado en la lista de pendientes de esta operadora
+        pendientes_ids = list(pendientes.index)
+        
+        # Buscar el índice del siguiente contacto después del último llamado
+        for i, pid in enumerate(pendientes_ids):
+            if pid > ultimo_llamado:
+                indice_inicial = i
+                break
+            elif pid == ultimo_llamado:
+                # Si el último llamado está en pendientes (fue no_contesta), ir al siguiente
+                indice_inicial = i + 1 if i + 1 < len(pendientes_ids) else 0
+                break
+        else:
+            # Si no encontramos ninguno mayor, volver al inicio (ya terminó la vuelta)
+            indice_inicial = 0
+    
+    # Inicializar o actualizar el índice en sesión
     if 'contacto_idx' not in st.session_state:
-        st.session_state.contacto_idx = 0
+        st.session_state.contacto_idx = indice_inicial
+    
+    # Solo actualizar si el índice calculado es diferente y la sesión está en 0
+    # Esto evita resetear si el usuario está navegando manualmente
+    if st.session_state.contacto_idx == 0 and indice_inicial > 0:
+        st.session_state.contacto_idx = indice_inicial
     
     if st.session_state.contacto_idx >= len(pendientes):
         st.session_state.contacto_idx = 0
