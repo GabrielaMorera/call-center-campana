@@ -360,35 +360,49 @@ def registrar_llamada(contacto_id, nombre_contacto, telefono, operadora, resulta
         st.error(f"Error registrando llamada: {e}")
     return False
 
-def obtener_contactos_pendientes(incluir_no_contesta=False):
-    """Obtiene contactos no llamados hoy"""
-    df_contactos = cargar_contactos()
+def obtener_contactos_ya_gestionados():
+    """
+    Obtiene los IDs de contactos que YA fueron gestionados exitosamente (verde, amarillo, rojo)
+    en CUALQUIER fecha. Estos contactos NO deben volver a aparecer.
+    """
     df_llamadas = cargar_llamadas()
+    
+    if df_llamadas.empty:
+        return set()
+    
+    # Filtrar llamadas con resultado definitivo (verde, amarillo, rojo)
+    resultados_definitivos = ['verde', 'amarillo', 'rojo']
+    llamadas_definitivas = df_llamadas[df_llamadas['resultado'].isin(resultados_definitivos)]
+    
+    if llamadas_definitivas.empty:
+        return set()
+    
+    # Retornar set de IDs ya gestionados
+    return set(int(x) for x in llamadas_definitivas['contacto_id'].unique())
+
+def obtener_contactos_pendientes_global():
+    """
+    Obtiene contactos que NUNCA han sido contactados exitosamente.
+    Excluye permanentemente los que ya tienen resultado verde, amarillo o rojo.
+    """
+    df_contactos = cargar_contactos()
     
     if df_contactos.empty:
         return pd.DataFrame()
     
-    hoy = obtener_hora_colombia().date().isoformat()
+    # Obtener IDs ya gestionados (en cualquier fecha)
+    ids_gestionados = obtener_contactos_ya_gestionados()
     
-    if not df_llamadas.empty and 'fecha' in df_llamadas.columns and 'contacto_id' in df_llamadas.columns:
-        llamadas_hoy = df_llamadas[df_llamadas['fecha'] == hoy]
-        
-        if incluir_no_contesta:
-            # Excluir solo los que SÍ contestaron (verde, amarillo, rojo)
-            contactados = llamadas_hoy[llamadas_hoy['resultado'].isin(['verde', 'amarillo', 'rojo'])]
-            llamados_hoy_ids = set(int(x) for x in contactados['contacto_id'].unique())
-        else:
-            # Excluir TODOS los llamados hoy (incluyendo no_contesta)
-            llamados_hoy_ids = set(int(x) for x in llamadas_hoy['contacto_id'].unique())
-        
-        pendientes = df_contactos[~df_contactos.index.isin(llamados_hoy_ids)]
-    else:
-        pendientes = df_contactos
+    # Filtrar contactos pendientes (nunca gestionados exitosamente)
+    pendientes = df_contactos[~df_contactos.index.isin(ids_gestionados)]
     
     return pendientes
 
-def obtener_no_contestaron():
-    """Obtiene los que no contestaron hoy para reintentar"""
+def obtener_no_contestaron_hoy():
+    """
+    Obtiene los contactos marcados como 'no_contesta' HOY que pueden ser reintentados.
+    Solo incluye los que su ÚLTIMO estado es 'no_contesta'.
+    """
     df_contactos = cargar_contactos()
     df_llamadas = cargar_llamadas()
     
@@ -397,8 +411,18 @@ def obtener_no_contestaron():
     
     hoy = obtener_hora_colombia().date().isoformat()
     
+    # Filtrar llamadas de hoy
     llamadas_hoy = df_llamadas[df_llamadas['fecha'] == hoy]
-    no_contestaron = llamadas_hoy[llamadas_hoy['resultado'] == 'no_contesta']
+    
+    if llamadas_hoy.empty:
+        return pd.DataFrame()
+    
+    # Ordenar por hora y obtener el último registro de cada contacto
+    llamadas_hoy = llamadas_hoy.sort_values('hora', ascending=False)
+    ultimo_registro = llamadas_hoy.drop_duplicates(subset=['contacto_id'], keep='first')
+    
+    # Filtrar solo los que su último estado es 'no_contesta'
+    no_contestaron = ultimo_registro[ultimo_registro['resultado'] == 'no_contesta']
     
     if no_contestaron.empty:
         return pd.DataFrame()
@@ -533,31 +557,33 @@ def pagina_operadora():
     
     st.markdown("---")
     
-    # Calcular pendientes y no_contestaron desde datos ya cargados
+    # ============== CAMBIO PRINCIPAL ==============
+    # Usar la nueva función que excluye contactos ya gestionados en CUALQUIER fecha
+    ids_gestionados = obtener_contactos_ya_gestionados()
+    
+    # Contactos pendientes = nunca gestionados exitosamente
+    pendientes_nuevos = df_contactos[~df_contactos.index.isin(ids_gestionados)] if not df_contactos.empty else pd.DataFrame()
+    
+    # También excluir los que ya fueron llamados HOY (incluso si solo fue no_contesta)
     if not df_llamadas.empty and 'fecha' in df_llamadas.columns:
         llamadas_hoy = df_llamadas[df_llamadas['fecha'] == hoy]
-        
-        # Obtener SOLO el último registro de cada contacto hoy (por timestamp)
         if not llamadas_hoy.empty:
-            # Ordenar por hora y obtener el último registro de cada contacto
-            llamadas_hoy = llamadas_hoy.sort_values('hora', ascending=False)
-            ultimo_registro_por_contacto = llamadas_hoy.drop_duplicates(subset=['contacto_id'], keep='first')
-            
-            todos_llamados = set(int(x) for x in ultimo_registro_por_contacto['contacto_id'].unique())
-            no_contestaron_ids = set(int(x) for x in ultimo_registro_por_contacto[ultimo_registro_por_contacto['resultado'] == 'no_contesta']['contacto_id'].unique())
-        else:
-            todos_llamados = set()
-            no_contestaron_ids = set()
-    else:
-        todos_llamados = set()
-        no_contestaron_ids = set()
+            llamados_hoy_ids = set(int(x) for x in llamadas_hoy['contacto_id'].unique())
+            pendientes_nuevos = pendientes_nuevos[~pendientes_nuevos.index.isin(llamados_hoy_ids)]
     
-    pendientes_nuevos = df_contactos[~df_contactos.index.isin(todos_llamados)] if not df_contactos.empty else pd.DataFrame()
-    pendientes_no_contesta = df_contactos[df_contactos.index.isin(no_contestaron_ids)] if not df_contactos.empty else pd.DataFrame()
+    # Para reintentos: solo los que tienen 'no_contesta' como último estado HOY
+    pendientes_no_contesta = obtener_no_contestaron_hoy()
     
     # Dividir contactos entre operadoras para evitar que llamen al mismo
     pendientes_nuevos = dividir_contactos_por_operadora(pendientes_nuevos, operadora_nombre)
     pendientes_no_contesta = dividir_contactos_por_operadora(pendientes_no_contesta, operadora_nombre)
+    
+    # Mostrar estadísticas globales
+    total_contactos = len(df_contactos) if not df_contactos.empty else 0
+    total_gestionados = len(ids_gestionados)
+    total_pendientes_global = total_contactos - total_gestionados
+    
+    st.info(f"📊 **Progreso Global:** {total_gestionados} de {total_contactos} contactos gestionados ({total_pendientes_global} pendientes)")
     
     # Modo de trabajo
     if 'modo_reintentar' not in st.session_state:
@@ -571,7 +597,7 @@ def pagina_operadora():
             st.session_state.contacto_idx = 0
             st.rerun()
     with col2:
-        if st.button(f"🔄 Reintentar No Contesta ({len(pendientes_no_contesta)})", use_container_width=True,
+        if st.button(f"🔄 Reintentar No Contesta Hoy ({len(pendientes_no_contesta)})", use_container_width=True,
                      type="primary" if st.session_state.modo_reintentar else "secondary"):
             st.session_state.modo_reintentar = True
             st.session_state.contacto_idx = 0
@@ -582,21 +608,7 @@ def pagina_operadora():
     # Seleccionar lista según modo
     if st.session_state.modo_reintentar:
         # Para reintentos, SIEMPRE cargar datos frescos sin caché
-        df_llamadas_fresh = cargar_llamadas_sin_cache()
-        df_contactos_fresh = cargar_contactos_sin_cache()
-        
-        if not df_llamadas_fresh.empty and 'fecha' in df_llamadas_fresh.columns:
-            llamadas_hoy_fresh = df_llamadas_fresh[df_llamadas_fresh['fecha'] == hoy]
-            if not llamadas_hoy_fresh.empty:
-                llamadas_hoy_fresh = llamadas_hoy_fresh.sort_values('hora', ascending=False)
-                ultimo_fresh = llamadas_hoy_fresh.drop_duplicates(subset=['contacto_id'], keep='first')
-                no_contesta_fresh = set(int(x) for x in ultimo_fresh[ultimo_fresh['resultado'] == 'no_contesta']['contacto_id'].unique())
-            else:
-                no_contesta_fresh = set()
-        else:
-            no_contesta_fresh = set()
-        
-        pendientes = df_contactos_fresh[df_contactos_fresh.index.isin(no_contesta_fresh)] if not df_contactos_fresh.empty else pd.DataFrame()
+        pendientes = obtener_no_contestaron_hoy()
         # Dividir contactos entre operadoras
         pendientes = dividir_contactos_por_operadora(pendientes, operadora_nombre)
         modo_texto = "🔄 REINTENTANDO"
@@ -606,9 +618,9 @@ def pagina_operadora():
     
     if pendientes.empty:
         if st.session_state.modo_reintentar:
-            st.info("✅ No hay contactos para reintentar.")
+            st.info("✅ No hay contactos para reintentar hoy.")
         else:
-            st.success("🎉 **¡Felicitaciones!** Se completaron todos los contactos nuevos.")
+            st.success("🎉 **¡Felicitaciones!** Se completaron todos los contactos pendientes por hoy.")
         return
     
     # Índice actual
@@ -635,6 +647,7 @@ def pagina_operadora():
         <div class="operadora-badge">{modo_texto} | Llamada {num_actual} de {total_asignados}</div>
         <div class="contact-name">{nombre}</div>
         <div class="contact-phone">📱 {telefono}</div>
+        <small style="color: #888;">ID: {contacto_id}</small>
     </div>
     """, unsafe_allow_html=True)
     
@@ -719,10 +732,29 @@ def mostrar_metricas():
     import plotly.express as px
     
     df_llamadas = cargar_llamadas()
+    df_contactos = cargar_contactos()
     
     if df_llamadas.empty:
         st.warning("📭 No hay llamadas registradas aún.")
         return
+    
+    # Mostrar progreso global
+    ids_gestionados = obtener_contactos_ya_gestionados()
+    total_contactos = len(df_contactos) if not df_contactos.empty else 0
+    total_gestionados = len(ids_gestionados)
+    
+    st.markdown("### 📈 Progreso Global de Campaña")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("📋 Total Contactos", total_contactos)
+    col2.metric("✅ Gestionados", total_gestionados)
+    col3.metric("⏳ Pendientes", total_contactos - total_gestionados)
+    
+    if total_contactos > 0:
+        progreso_global = (total_gestionados / total_contactos) * 100
+        st.progress(progreso_global / 100)
+        st.caption(f"Progreso: {progreso_global:.1f}%")
+    
+    st.markdown("---")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -832,8 +864,15 @@ def mostrar_sidebar():
         
         if user['rol'] == 'operadora':
             stats = obtener_stats_operadora(user['nombre'])
-            st.metric("Mis llamadas", stats['total'])
+            st.metric("Mis llamadas hoy", stats['total'])
             st.progress(stats['progreso'] / 100)
+            
+            # Mostrar progreso global
+            df_contactos = cargar_contactos()
+            ids_gestionados = obtener_contactos_ya_gestionados()
+            total_contactos = len(df_contactos) if not df_contactos.empty else 0
+            total_gestionados = len(ids_gestionados)
+            st.metric("Total gestionados", f"{total_gestionados}/{total_contactos}")
         
         st.markdown("---")
         
