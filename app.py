@@ -847,16 +847,34 @@ def mostrar_sidebar():
         st.markdown(f"📅 **{fecha_formateada}**")
         
         if user['rol'] == 'operadora':
-            stats = obtener_stats_operadora(user['nombre'])
+            df_llamadas = cargar_llamadas()
+            operadora_nombre = user['nombre']
+            
+            # Llamadas de hoy
+            stats = obtener_stats_operadora(operadora_nombre)
             st.metric("Mis llamadas hoy", stats['total'])
             st.progress(stats['progreso'] / 100)
+            
+            # Total de llamadas de ESTA operadora (todas las fechas)
+            if not df_llamadas.empty:
+                mis_llamadas_total = len(df_llamadas[df_llamadas['operadora'] == operadora_nombre])
+                mis_gestionados = len(df_llamadas[(df_llamadas['operadora'] == operadora_nombre) & 
+                                                   (df_llamadas['resultado'].isin(['verde', 'amarillo', 'rojo']))])
+            else:
+                mis_llamadas_total = 0
+                mis_gestionados = 0
+            
+            st.metric("Mis llamadas totales", mis_llamadas_total)
+            st.metric("Mis gestionados ✅", mis_gestionados)
+            
+            st.markdown("---")
             
             # Mostrar progreso global
             df_contactos = cargar_contactos()
             ids_gestionados = obtener_contactos_ya_gestionados()
             total_contactos = len(df_contactos) if not df_contactos.empty else 0
             total_gestionados = len(ids_gestionados)
-            st.metric("Total gestionados", f"{total_gestionados}/{total_contactos}")
+            st.caption(f"📊 Global: {total_gestionados}/{total_contactos} gestionados")
         
         st.markdown("---")
         
